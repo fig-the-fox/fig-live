@@ -3,22 +3,23 @@
 //        node scripts/verify-web4.mjs --deploy-only                    (A, B and C only, no browser pages)
 //        node scripts/verify-web4.mjs --live https://web-4.app/app/FIG/   (after a deploy: browser checks only)
 //
-// A. DEN PARITY: ~/projects/fig/den/full.html (the reviewed page live on Fig's computer) is the source of
-//    truth. Its hash must match DEN_SHA256, and its install line, kit cards, receipts, headline and claim
-//    sentence must match src/content/kit.ts exactly.
+// A. KIT PARITY: Fig's official kit repo (github.com/fig-the-fox/fig-kit) is the source of truth. Its release
+//    commit and script fingerprints are vendored in scripts/fig-kit-release.json. src/content/kit.ts must have
+//    one install line pointing at that commit, the main version's hash in it, sha256sum -c, no sudo and no
+//    pipe to a shell, every receipt in the release map, and the kit cards the README lists.
 // B. PACKAGE: dist-web4/fig-live-web4.tgz is <= 2 MB, matches SHA256SUMS and its .b64, repacks to the same
 //    bytes, reads cleanly with the system tar AND Python's tarfile, has sorted entries, one fixed mtime,
 //    root:root, and none of Fig's own file names (.sh, install.html, kit-files/), no uptime.json, no
 //    macOS metadata and no local paths.
 // C. DEPLOY: runs the exact one-line Fig command (scripts/fig-command.mjs) against a simulated
-//    /workspace/public holding the den as index.html plus fake copies of Fig's files, served by a local
+//    /workspace/public holding a stand-in old index.html plus fake copies of Fig's files, served by a local
 //    stand-in for Fig's server. Fig's files must come through untouched and index.html must be backed up.
-//    Then twice more: with Fig's server sending JS as text/plain (must roll back to the den), and with a
+//    Then twice more: with Fig's server sending JS as text/plain (must roll back to the old index), and with a
 //    wrong sha256 (must change nothing).
 // D. BROWSER (390 and 1280 px, every page) through a local stand-in for Web4 (scripts/serve-web4.mjs:
 //    /app/FIG/ mount, Web4's headers, its injected analytics tags as stubs, misses are 404 and logged):
 //    no 404s or misses, right content-type per asset, no console errors, every link resolves, client-side
-//    navigation stays under /app/FIG/, the install line is byte-identical to the den's, no uptime strip.
+//    navigation stays under /app/FIG/, the install line is byte-identical to kit.ts's, no uptime strip.
 //    Screenshots: docs/screens-web4/<page>-<width>.png. Plus the /app/<token id>/ alias, the back link
 //    from Fig's install.html, and what today's 200-fallback does to a URL without its trailing slash.
 
@@ -30,15 +31,17 @@ import { createServer } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { CLAIM_LEAD, CLAIM_TITLE, COMING_NEXT, DEN_SHA256, FEEDBACK_LEAD, HOLDER_CHAT_LABEL, INSTALL_LINE, KIT_STEPS, RENT_URL, VERSIONS } from "../src/content/kit.ts";
+import { CLAIM_LEAD, CLAIM_TITLE, COMING_NEXT, ASK_FIG_LABEL, INSTALL_LINE, KIT_STEPS, RENT_URL, VERSIONS } from "../src/content/kit.ts";
 import { MAX_CHARS, figCommand, shaFromSums } from "./fig-command.mjs";
 import { collect, forbiddenReason, packTar } from "./pack-web4.mjs";
 import { ALIAS, FAKE_FIG_FILES, PREFIX, startServers, writeFakeFigFiles } from "./serve-web4.mjs";
 
 // Where Terminal will host the .b64 (shape only; this run never fetches it).
-const REAL_URL_SHAPE = "https://gist.githubusercontent.com/<owner>/<gist-id>/raw/fig-live-web4.tgz.b64";
+const REAL_URL_SHAPE = "https://gist.githubusercontent.com/ownerownero/00000000000000000000000000000000/raw/fig-live-web4.tgz.b64";
 const LIVE = process.argv.includes("--live") ? process.argv[process.argv.indexOf("--live") + 1] : null;
-const DEN = process.env.FIG_DEN_HTML ?? join(homedir(), "projects/fig/den/full.html");
+const RELEASE = JSON.parse(readFileSync(new URL("./fig-kit-release.json", import.meta.url), "utf8"));
+// Stand-in for whatever index.html sat in /workspace/public before the deploy (the deploy must back it up and roll back to it).
+const DEN = Buffer.from("<!doctype html><title>old index</title><p>Fig's previous page.</p>\n");
 const DIST = "dist-web4";
 const TGZ = join(DIST, "fig-live-web4.tgz");
 const SHOTS = "docs/screens-web4";
@@ -96,43 +99,24 @@ async function newContext(browser, width, origin) {
   return ctx;
 }
 
-// ---------- A. DEN PARITY ----------
-async function denParity(browser) {
-  console.log(`\n== DEN PARITY (${DEN}) ==`);
-  const raw = readFileSync(DEN);
-  check(sha256(raw) === DEN_SHA256, `den hash is the one kit.ts was synced to (${sha256(raw).slice(0, 12)}…)${sha256(raw) === DEN_SHA256 ? "" : ": the den changed, re-sync src/content/kit.ts and DEN_SHA256"}`);
-  const page = await browser.newPage();
-  await page.goto(pathToFileURL(DEN).href);
-  const den = await page.evaluate(() => ({
-    h1: document.querySelector("h1")?.textContent ?? "",
-    claim: document.querySelector("h1")?.nextElementSibling?.textContent ?? "",
-    pre: document.querySelector("pre")?.textContent ?? "",
-    cards: [...document.querySelectorAll(".card")].map((c) => ({ code: c.querySelector("code")?.textContent ?? "", text: c.querySelector("p")?.textContent ?? "" })),
-    rows: [...document.querySelectorAll("table tr")].map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent ?? "")),
-    timings: [...document.querySelectorAll("p")].map((p) => p.textContent ?? "").find((t) => t.includes("not independently checked")) ?? "",
-    feedback: (() => {
-      const h = [...document.querySelectorAll("h2")].find((x) => x.textContent?.trim() === "Feedback");
-      const p = h?.nextElementSibling;
-      return { text: p?.textContent ?? "", links: [...(p?.querySelectorAll("a") ?? [])].map((a) => a.getAttribute("href")) };
-    })(),
-  }));
-  await page.close();
-  check(Buffer.from(INSTALL_LINE, "utf8").equals(Buffer.from(den.pre, "utf8")), `install line in kit.ts is byte-identical to the den's <pre> (${Buffer.byteLength(den.pre)} bytes)`);
-  check(den.h1 === PAGES[0].h1, `home headline matches the den's h1 ("${den.h1}")`);
-  check(den.claim.startsWith(CLAIM_LEAD), "home claim sentence is the den's first claim sentence");
+// ---------- A. KIT PARITY ----------
+async function denParity() {
+  console.log(`\n== KIT PARITY (${RELEASE.repo} @ ${RELEASE.commit.slice(0, 12)}) ==`);
+  // Codex review 10-22: every check below is exact. A fragment check let "sha256sum -c ; install" pass, a main
+  // version taken from VERSIONS itself could be swapped, and prefix-matched cards let any command through.
+  const main = VERSIONS.filter((v) => v.main);
+  check(main.length === 1 && `fig-${main[0].version}.sh` === RELEASE.main, `exactly one version is marked main, and it is the release's main (${RELEASE.main})`);
+  const want = `https://raw.githubusercontent.com/${RELEASE.repo}/${RELEASE.commit}/${RELEASE.main}`;
+  const exact = `mkdir -p ~/.local/bin && curl -fsSL ${want} -o /tmp/fig.sh && echo "${RELEASE.sha256[RELEASE.main]}  /tmp/fig.sh" | sha256sum -c && install -m 755 /tmp/fig.sh ~/.local/bin/fig && export PATH="$HOME/.local/bin:$PATH"`;
+  check(INSTALL_LINE === exact, `install line is exactly the release's: one URL (${RELEASE.main} at ${RELEASE.commit.slice(0, 12)}), its fingerprint, sha256sum -c && install`);
+  check(!/\bsudo\b/.test(INSTALL_LINE) && !/\|\s*(ba|z)?sh\b/.test(INSTALL_LINE), "install line has no sudo and does not pipe to a shell");
+  const files = VERSIONS.map((v) => `fig-${v.version}.sh`);
+  const bad = VERSIONS.filter((v) => RELEASE.sha256[`fig-${v.version}.sh`] !== v.sha256).map((v) => v.version);
+  const complete = new Set(files).size === files.length && [...files].sort().join() === Object.keys(RELEASE.sha256).sort().join();
+  check(bad.length === 0 && complete, `receipts are exactly the release's ${Object.keys(RELEASE.sha256).length} versions, each once, each with its own fingerprint${bad.length ? `; wrong: ${bad.join(", ")}` : ""}${complete ? "" : "; missing or duplicated versions"}`);
   const ours = KIT_STEPS.flatMap((s) => s.commands).map((c) => ({ code: c.command, text: c.body.map((p) => (typeof p === "string" ? p : p.code)).join("") }));
-  check(den.cards.length === ours.length && den.cards.every((d, i) => d.code === ours[i].code && d.text === ours[i].text), `${ours.length} kit cards (doctor, chat, notebook, timer, save) match the den word for word`);
-  const denVersions = den.rows.map(([v, h]) => ({ version: v.split(" ")[0], main: v.includes("(main)"), sha256: h }));
-  check(
-    denVersions.length === VERSIONS.length && denVersions.every((d, i) => d.version === VERSIONS[i].version && d.sha256 === VERSIONS[i].sha256 && d.main === !!VERSIONS[i].main),
-    `receipts: ${VERSIONS.length} versions and full hashes match the den (${denVersions.map((d) => d.version).join(", ")})`,
-  );
-  check(/measurements.*not independently checked: doctor 0\.2 s · notebook ready 31 s · first chat reply 10\.5 s\./.test(den.timings), "den still carries the measured-timings caveat");
-  check(
-    den.feedback.links.length === 1 && den.feedback.links[0] === "feedback.html" && den.feedback.text.startsWith(FEEDBACK_LEAD) && den.feedback.text.includes("holder chat"),
-    `den's Feedback section links Fig's feedback page and mentions the holder chat, and starts with Fig Live's question ("${FEEDBACK_LEAD}")`,
-  );
-  return den;
+  check(JSON.stringify(ours) === JSON.stringify(RELEASE.cards), `kit cards are exactly the reviewed ones in fig-kit-release.json (${RELEASE.cards.map((c) => c.code).join(", ")})`);
+  return { pre: INSTALL_LINE, cards: ours, rows: VERSIONS.map((v) => [`${v.version}${v.main ? " (main)" : ""}`, v.sha256]), count: ours.length };
 }
 
 // ---------- B. PACKAGE ----------
@@ -206,7 +190,7 @@ function seedPublic() {
   const dir = mkdtempSync(join(tmpdir(), "fig-live-workspace-"));
   const pub = join(dir, "public");
   mkdirSync(pub);
-  writeFileSync(join(pub, "index.html"), readFileSync(DEN));
+  writeFileSync(join(pub, "index.html"), DEN);
   writeFakeFigFiles(pub);
   return pub;
 }
@@ -327,7 +311,7 @@ async function deployChecks() {
   const after = figFileState(pub);
   check(JSON.stringify(after) === JSON.stringify(before), "Fig's install.html, feedback.html, fig-v0.2.2.sh, fig.sh (still a symlink) and kit-files/ are byte-for-byte untouched");
   const backups = readdirSync(pub).filter((n) => /^index\.fig-backup-\d+\.html$/.test(n));
-  check(backups.length === 1 && readFileSync(join(pub, backups[0])).equals(readFileSync(DEN)), `old index.html (the den) backed up as ${backups[0]}`);
+  check(backups.length === 1 && readFileSync(join(pub, backups[0])).equals(DEN), `old index.html (the previous index) backed up as ${backups[0]}`);
   const tmp = mkdtempSync(join(tmpdir(), "fig-live-web4-cmp-"));
   execFileSync("tar", ["-xzf", TGZ, "-C", tmp]);
   check(readFileSync(join(pub, "index.html")).equals(readFileSync(join(tmp, "index.html"))), "index.html is now Fig Live's home page");
@@ -433,7 +417,7 @@ async function deployChecks() {
   s = await startServers({ root: pubM, port: 3441, figPort: 3442, figTypeFor: (path) => (path.startsWith("/_next/static/chunks/") ? "text/plain" : null) });
   const rM = await runFig(figCommand({ url: urlA, sha256: sha, publicDir: pubM, server: s.figBase.replace(/^http:\/\//, "") }));
   await s.close();
-  check(rM.code === 1 && rM.out.includes("FIG-LIVE-ROLLED-BACK") && readFileSync(join(pubM, "index.html")).equals(readFileSync(DEN)), `JS check looks at an app chunk, not a leftover manifest: chunks served as text/plain roll back (exit ${rM.code})`);
+  check(rM.code === 1 && rM.out.includes("FIG-LIVE-ROLLED-BACK") && readFileSync(join(pubM, "index.html")).equals(DEN), `JS check looks at an app chunk, not a leftover manifest: chunks served as text/plain roll back (exit ${rM.code})`);
 
   // 9. mktemp fails (bad TMPDIR): the command must stop, not fall back to $HOME and write there.
   const pubT = seedPublic();
@@ -442,20 +426,20 @@ async function deployChecks() {
   const rT = await runFig(figCommand({ url: urlA, sha256: sha, publicDir: pubT, server: s.figBase.replace(/^http:\/\//, "") }), "bash", { TMPDIR: join(fakeHome, "no-such-dir"), HOME: fakeHome });
   await s.close();
   const homeFiles = readdirSync(fakeHome);
-  check(rT.code !== 0 && homeFiles.length === 0 && readFileSync(join(pubT, "index.html")).equals(readFileSync(DEN)), `mktemp failure stops the command before it downloads anything or touches public/ (exit ${rT.code}; files in HOME: ${homeFiles.join(", ") || "none"})`);
+  check(rT.code !== 0 && homeFiles.length === 0 && readFileSync(join(pubT, "index.html")).equals(DEN), `mktemp failure stops the command before it downloads anything or touches public/ (exit ${rT.code}; files in HOME: ${homeFiles.join(", ") || "none"})`);
 
   // 2. Fig's server sends JS as text/plain (with Web4's nosniff, browsers would refuse it): roll back.
   const pub2 = seedPublic();
   s = await startServers({ root: pub2, port: 3441, figPort: 3442, figMime: { ".html": "text/html", ".css": "text/css", ".js": "text/plain" } });
   const r2 = await runFig(figCommand({ url: "http://127.0.0.1:3443/fig-live-web4.tgz.b64", sha256: sha, publicDir: pub2, server: s.figBase.replace(/^http:\/\//, "") }));
-  check(r2.code === 1 && r2.out.includes("FIG-LIVE-ROLLED-BACK") && readFileSync(join(pub2, "index.html")).equals(readFileSync(DEN)), `wrong JS content-type on Fig's server: command rolls back to the den and fails (exit ${r2.code})`);
+  check(r2.code === 1 && r2.out.includes("FIG-LIVE-ROLLED-BACK") && readFileSync(join(pub2, "index.html")).equals(DEN), `wrong JS content-type on Fig's server: command rolls back to the old index and fails (exit ${r2.code})`);
   await s.close();
 
   // 3. A tampered or truncated download: nothing changes.
   const pub3 = seedPublic();
   s = await startServers({ root: pub3, port: 3441, figPort: 3442 });
   const r3 = await runFig(figCommand({ url: "http://127.0.0.1:3443/fig-live-web4.tgz.b64", sha256: "0".repeat(64), publicDir: pub3, server: s.figBase.replace(/^http:\/\//, "") }));
-  check(r3.code === 1 && r3.out.includes("f.tgz: FAILED") && readFileSync(join(pub3, "index.html")).equals(readFileSync(DEN)) && !existsSync(join(pub3, "_next")), `sha256 mismatch: command stops before touching public/ (exit ${r3.code})`);
+  check(r3.code === 1 && r3.out.includes("f.tgz: FAILED") && readFileSync(join(pub3, "index.html")).equals(DEN) && !existsSync(join(pub3, "_next")), `sha256 mismatch: command stops before touching public/ (exit ${r3.code})`);
   await s.close();
   dist.close();
   return pub;
@@ -548,11 +532,14 @@ async function browserSuite(browser, { origin, misses, den, shots, stubs }) {
       check(said.length === 0, `${tag}: none of the never-say claims (signature, 2M = 2h, guarantees, GPU counts, H100/B200)${said.length ? `: ${said.join(", ")}` : ""}`);
       check(/Web4, which hosts it, adds its own analytics/.test(info.text), `${tag}: footer says Web4 adds its own analytics (no "no tracking" claim on Web4)`);
       if (pg.name === "home" || pg.name === "kit") {
-        const fb = info.links.filter((l) => l.raw === `${PREFIX}/feedback.html`);
-        check(fb.length >= 1 && /Feedback/.test(info.text), `${tag}: Feedback section links Fig's feedback page at ${PREFIX}/feedback.html`);
+        const fb = info.links.filter((l) => l.href === "https://x.com/AskFigFox");
+        check(fb.length >= 1 && /Feedback/.test(info.text), `${tag}: Feedback section links Fig on X (${fb.length}×)`);
       }
-      const chat = info.links.filter((l) => l.text === HOLDER_CHAT_LABEL);
-      check(chat.length >= 1 && chat.every((l) => l.href === PROJECT_URL), `${tag}: "${HOLDER_CHAT_LABEL}" links to Fig's Web4 page (${chat.length}×)`);
+      if (pg.name === "home" || pg.name === "kit") {
+        const chat = info.links.filter((l) => l.text === ASK_FIG_LABEL);
+        check(chat.length >= 1 && chat.every((l) => l.href === "https://x.com/AskFigFox"), `${tag}: "${ASK_FIG_LABEL}" links to Fig on X (${chat.length}×)`);
+      }
+      check(!/holder chat/i.test(info.text) && !info.links.some((l) => l.raw?.includes("web-4.app/app/FIG") || l.href.includes("web-4.app/app/FIG")), `${tag}: no holder chat, no dead web-4.app/app/FIG links`);
 
       for (const l of info.links) {
         const u = new URL(l.href);
@@ -612,23 +599,28 @@ async function browserSuite(browser, { origin, misses, den, shots, stubs }) {
           guideText: document.querySelector("a[data-install-guide]")?.textContent,
           steps: document.querySelectorAll("main ol > li").length,
         }));
-        check(Buffer.from(kit.pre, "utf8").equals(Buffer.from(den.pre, "utf8")), `${tag}: install line on the page is byte-identical to the den's <pre>`);
+        check(Buffer.from(kit.pre, "utf8").equals(Buffer.from(den.pre, "utf8")), `${tag}: install line on the page is byte-identical to kit.ts's INSTALL_LINE`);
         await page.getByRole("button", { name: "Copy the install line" }).click();
         const clip = await page.evaluate(() => navigator.clipboard.readText());
-        check(Buffer.from(clip, "utf8").equals(Buffer.from(den.pre, "utf8")), `${tag}: copy button puts the den's exact install line on the clipboard`);
-        check(kit.steps === 4 && kit.cards.length === den.cards.length && kit.cards.every(([code, text], i) => code === den.cards[i].code && text === den.cards[i].text), `${tag}: 4 steps; doctor, chat, notebook, timer and save cards match the den word for word`);
-        check(kit.guide === `${PREFIX}/install.html` && kit.guideText === "Install guide", `${tag}: "Install guide" links to ${PREFIX}/install.html (Fig's own page beside the site)`);
-        check(info.text.includes("It checks the file's fingerprint before installing anything. No sudo.") && info.text.includes("If Fig is napping, the download may not work until it wakes."), `${tag}: fingerprint/no-sudo note and the napping note are shown`);
+        check(Buffer.from(clip, "utf8").equals(Buffer.from(den.pre, "utf8")), `${tag}: copy button puts the exact install line on the clipboard`);
+        check(kit.steps === 4 && kit.cards.length === den.cards.length && kit.cards.every((ps, i) => ps.length === 2 && ps[0] === den.cards[i].code && ps[1] === den.cards[i].text), `${tag}: 4 steps; the ${den.count} kit cards (doctor, chat, persona, notebook, timer, save) match kit.ts word for word`);
+        check(kit.guide == null, `${tag}: no "Install guide" link (install.html is gone)`);
+        check(info.text.includes("It checks the file's fingerprint before installing anything. No sudo.") && !info.text.includes("the download may not work"), `${tag}: fingerprint/no-sudo note shown, no napping-download note`);
         await page.waitForTimeout(2600);
       }
       if (pg.name === "next") {
         const items = await page.locator("main ul li").allInnerTexts();
         check(COMING_NEXT.every((r) => items.some((t) => t.includes(r))), `${tag}: recipes shown`);
-        check((await page.getByRole("link", { name: "Chat with Fig / vote" }).getAttribute("href")) === PROJECT_URL, `${tag}: vote button links to Fig's Web4 page`);
+        check((await page.getByRole("link", { name: "Ask Fig on X" }).getAttribute("href")) === "https://x.com/AskFigFox", `${tag}: "Ask Fig on X" links to Fig on X`);
       }
       if (pg.name === "receipts") {
-        const rows = await page.locator("main tbody tr").allInnerTexts();
-        check(rows.length === 4 && den.rows.every(([v, h], i) => rows[i].includes(v.split(" ")[0]) && rows[i].includes(h)), `${tag}: all 4 versions with full hashes, in the den's order`);
+        // Exact cells (Codex review 10-22): version text, the main badge on exactly the main row, the full hash.
+        const rows = await page.evaluate(() => [...document.querySelectorAll("main tbody tr")].map((tr) => {
+          const th = tr.querySelector("th");
+          const badges = [...(th?.querySelectorAll("span") ?? [])].map((x) => x.textContent ?? "");
+          return { cells: tr.children.length, version: (th?.firstChild?.textContent ?? "").trim(), badges, hash: tr.querySelector("td")?.textContent ?? "" };
+        }));
+        check(rows.length === VERSIONS.length && VERSIONS.every((v, i) => rows[i].cells === 2 && rows[i].version === v.version && JSON.stringify(rows[i].badges) === JSON.stringify(v.main ? ["main"] : []) && rows[i].hash === v.sha256), `${tag}: all ${VERSIONS.length} versions, exact names, main badge only on ${VERSIONS.find((v) => v.main)?.version}, full hashes, in kit.ts's order`);
         check(/My own measurements|Fig's own measurements/.test(info.text) && info.text.includes("not independently checked: doctor 0.2 s · notebook ready 31 s · first chat reply 10.5 s."), `${tag}: the measured-timings caveat is kept`);
       }
 
@@ -673,7 +665,7 @@ async function browserSuite(browser, { origin, misses, den, shots, stubs }) {
 }
 
 async function extraChecks(browser, { origin, misses, deployed }) {
-  console.log("\n== EXTRAS (alias, Fig's install.html back link, today's fallback) ==");
+  console.log("\n== EXTRAS (alias, today's fallback) ==");
   const take = async () => (await (await fetch(misses)).json()).map((m) => m.path);
   await take();
   const ctx = await newContext(browser, 390, origin);
@@ -687,23 +679,6 @@ async function extraChecks(browser, { origin, misses, deployed }) {
   check(norm(h1) === PAGES[0].h1 && log.bad.length === 0 && log.errors.length === 0 && missed.length === 0, `alias ${ALIAS}/ renders Home with every asset loading${[...log.bad, ...log.errors, ...missed].length ? `: ${[...log.bad, ...log.errors, ...missed].join(" | ")}` : ""}`);
   await page.close();
 
-  // Install guide -> Fig's install.html (a fake here) -> its "Back to Main Guide" link (href="index.html").
-  page = await ctx.newPage();
-  log = watch(page, origin);
-  await page.goto(`${origin}${PREFIX}/kit/`, { waitUntil: "networkidle" });
-  await page.locator("a[data-install-guide]").click();
-  await page.waitForURL(`${origin}${PREFIX}/install.html`);
-  check((await page.title()).startsWith("FAKE install guide"), "Install guide opens /app/FIG/install.html (the fake stand-in for Fig's page)");
-  await page.getByRole("link", { name: /Back to Main Guide/ }).click();
-  await page.waitForURL(`${origin}${PREFIX}/index.html`);
-  await page.waitForSelector('#status[data-settled="yes"]', { timeout: 20_000 }).catch(() => {});
-  h1 = await page.locator("h1").textContent();
-  // Explained: Fig's install.html has no icon link, so Chrome asks for /favicon.ico, which web-4.app also
-  // answers 404 (checked 2026-10-21). That request belongs to Fig's page, not this site.
-  missed = (await take()).filter((p) => p !== "/favicon.ico");
-  log.errors = log.errors.filter((e) => !e.endsWith("@ /favicon.ico"));
-  check(norm(h1) === PAGES[0].h1 && log.bad.length === 0 && log.errors.length === 0 && missed.length === 0, `install.html's back link (index.html) lands on a working Home at ${PREFIX}/index.html${[...log.bad, ...log.errors, ...missed].length ? `: ${[...log.bad, ...log.errors, ...missed].join(" | ")}` : ""}`);
-  await page.close();
   await ctx.close();
 
   // web-4.app answers unknown paths with 200 + index.html today. Our links always end in "/", so this only
@@ -724,7 +699,7 @@ async function extraChecks(browser, { origin, misses, deployed }) {
 // ---------- run ----------
 const browser = await launch();
 try {
-  const den = await denParity(browser);
+  const den = await denParity();
   if (LIVE) {
     const u = new URL(LIVE);
     await browserSuite(browser, { origin: u.origin, misses: null, den, shots: null, stubs: false });

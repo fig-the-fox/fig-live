@@ -1,0 +1,38 @@
+{
+  "repo": "fig-the-fox/fig-kit",
+  "commit": "b2b5145a6d009d702efabb3e6d3289875ebe33c2",
+  "sha256": {
+    "fig-v0.1.0.sh": "c64acc2c1131de484bfa65bd1c994feb48ee294a8e54ed47b7db00c9f6a2f1f3",
+    "fig-v0.1.1.sh": "ff94e8175f0ed8d9229ba98253c2faaca90ecf3b5c611d1de94a0476486773ac",
+    "fig-v0.1.2.sh": "a51ad26b4932d16d49be576dfbfd4d6cdec251b88900affa96d229c465a179f9",
+    "fig-v0.2.2.sh": "aeb22ea06d561f1955f4bc821703bbac0395bf6ce2512b47b48f719c77b2b68c",
+    "fig-v0.3.0.sh": "9bfa0934cd788b17cdf5b870ece3005ec4d9b957dd62f5bf7c48adce88ddae77"
+  },
+  "main": "fig-v0.3.0.sh",
+  "cards": [
+    {
+      "code": "fig doctor",
+      "text": "Your GPU, its memory, CUDA version and free disk, in a few seconds."
+    },
+    {
+      "code": "fig start chat",
+      "text": "Installs Ollama (its official installer) and downloads an open AI model sized to your GPU. It runs only on that machine, with an API at 127.0.0.1:11434. Then chat with ollama run llama3.1:8b. The first run takes a few minutes."
+    },
+    {
+      "code": "fig start persona",
+      "text": "Gives the chat model from fig start chat a fox personality: Fig, a friendly, honest guide. It installs and downloads nothing, so run fig start chat first. Then chat with ollama run fig-fox."
+    },
+    {
+      "code": "fig start notebook",
+      "text": "Starts a private Jupyter notebook locked to the machine, with a login token. It prints the SSH tunnel line to open it from your laptop."
+    },
+    {
+      "code": "fig timer 2",
+      "text": "Counts down two hours and warns you in your terminal at 15 and 5 minutes left."
+    },
+    {
+      "code": "fig save",
+      "text": "Packs ~/fig-out into one file and prints the command to download it before the rental ends. Cache it before you go."
+    }
+  ]
+}

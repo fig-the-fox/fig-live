@@ -94,7 +94,7 @@ async function banner(page, text) {
 async function checkCopy(page, w) {
   await page.getByRole("button", { name: "Copy the install line" }).click();
   const clip = await page.evaluate(() => navigator.clipboard.readText());
-  check(clip === INSTALL_LINE && clip.includes('b68c  /tmp/fig.sh" | sha256sum -c'), `${w}px kit: copy button puts the exact install line on the clipboard (two-space sha256 format intact)`);
+  check(clip === INSTALL_LINE && clip.includes(`${VERSIONS.find((v) => v.main).sha256}  /tmp/fig.sh" | sha256sum -c`), `${w}px kit: copy button puts the exact install line on the clipboard (two-space sha256 format intact)`);
   check((await page.getByRole("button", { name: "Copied" }).count()) === 1, `${w}px kit: copy button confirms with "Copied"`);
   await page.waitForTimeout(2600); // let the label reset before the screenshot
 }

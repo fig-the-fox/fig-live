@@ -1,13 +1,11 @@
-// Static copy for the hero, kit guide and receipts, taken from the reviewed, fact-checked den page that
-// is live on Fig's computer: ~/projects/fig/den/full.html (2026-10-21, sha256 below). Change it there
-// first, then here. scripts/verify-web4.mjs reads that file and fails if the install line, the kit
-// cards or the receipts drift from it, and if its hash no longer matches DEN_SHA256 (re-check this
-// file against the new den, then update the hash).
-export const DEN_SHA256 = "08acf73690bbc0fccad2acaa1cbfb15ca8922f0615cb64b0e5b61e766832e241";
+// Static copy for the hero, kit guide and receipts. The source of truth is Fig's official kit repo,
+// github.com/fig-the-fox/fig-kit (its README install line, versions and commands). The release commit and
+// every script fingerprint are vendored in scripts/fig-kit-release.json; scripts/verify-web4.mjs fails if
+// the install line, the main version, the receipts or the kit cards drift from that release.
 
 // Note the two spaces between the hash and the file name: `sha256sum -c` needs them.
 export const INSTALL_LINE =
-  'mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/fig-the-fox/fig-kit/4260b976e14191f917d69544a8c571dca97b47b1/fig-v0.2.2.sh -o /tmp/fig.sh && echo "aeb22ea06d561f1955f4bc821703bbac0395bf6ce2512b47b48f719c77b2b68c  /tmp/fig.sh" | sha256sum -c && install -m 755 /tmp/fig.sh ~/.local/bin/fig && export PATH="$HOME/.local/bin:$PATH"';
+  'mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/fig-the-fox/fig-kit/b2b5145a6d009d702efabb3e6d3289875ebe33c2/fig-v0.3.0.sh -o /tmp/fig.sh && echo "9bfa0934cd788b17cdf5b870ece3005ec4d9b957dd62f5bf7c48adce88ddae77  /tmp/fig.sh" | sha256sum -c && install -m 755 /tmp/fig.sh ~/.local/bin/fig && export PATH="$HOME/.local/bin:$PATH"';
 
 export const INSTALL_NOTE = "It checks the file's fingerprint before installing anything. No sudo. If the check fails, nothing is installed.";
 
@@ -32,6 +30,18 @@ export const KIT_STEPS: Array<{ title: string; commands: KitCommand[] }> = [
         ],
       },
       {
+        command: "fig start persona",
+        body: [
+          "Gives the chat model from ",
+          { code: "fig start chat" },
+          " a fox personality: Fig, a friendly, honest guide. It installs and downloads nothing, so run ",
+          { code: "fig start chat" },
+          " first. Then chat with ",
+          { code: "ollama run fig-fox" },
+          ".",
+        ],
+      },
+      {
         command: "fig start notebook",
         body: ["Starts a private Jupyter notebook locked to the machine, with a login token. It prints the SSH tunnel line to open it from your laptop."],
       },
@@ -52,14 +62,15 @@ export const KIT_STEPS: Array<{ title: string; commands: KitCommand[] }> = [
 export const COMING_NEXT = ["Make images", "Transcribe audio", "Fine-tune a model"] as const;
 
 export const VERSIONS: Array<{ version: string; main?: boolean; sha256: string }> = [
-  { version: "v0.2.2", main: true, sha256: "aeb22ea06d561f1955f4bc821703bbac0395bf6ce2512b47b48f719c77b2b68c" },
+  { version: "v0.3.0", main: true, sha256: "9bfa0934cd788b17cdf5b870ece3005ec4d9b957dd62f5bf7c48adce88ddae77" },
+  { version: "v0.2.2", sha256: "aeb22ea06d561f1955f4bc821703bbac0395bf6ce2512b47b48f719c77b2b68c" },
   { version: "v0.1.2", sha256: "a51ad26b4932d16d49be576dfbfd4d6cdec251b88900affa96d229c465a179f9" },
   { version: "v0.1.1", sha256: "ff94e8175f0ed8d9229ba98253c2faaca90ecf3b5c611d1de94a0476486773ac" },
   { version: "v0.1.0", sha256: "c64acc2c1131de484bfa65bd1c994feb48ee294a8e54ed47b7db00c9f6a2f1f3" },
 ];
 
 export const REVIEW_NOTE =
-  "Every version is safety-reviewed before it becomes the main install. One (v0.2.0) failed and was pulled within the hour. Older versions are no longer hosted; their fingerprints stay here as receipts.";
+  "Every version is safety-reviewed before it becomes the main install. One (v0.2.0) failed and was pulled within the hour. Older versions stay in Fig's kit repo, unchanged, as receipts.";
 
 export const MEASUREMENTS_NOTE =
   "Fig's own measurements on its RTX 3090 (24 GB, model already downloaded), not independently checked: doctor 0.2 s · notebook ready 31 s · first chat reply 10.5 s.";

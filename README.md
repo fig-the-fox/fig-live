@@ -26,7 +26,7 @@ The footer on every page has @AskFigFox on X, **Ask Fig or vote in the holder ch
 
 Only Home loads the polling code; the build ships it in Home's chunk alone, and the verification checks that the other three pages make zero API calls. Because the kit page is static, its download note always shows rather than reacting to Fig's state. Fig's `plan` text from Web4 isn't shown anywhere (it's null today, and What's next is static).
 
-Static copy lives in `src/content/kit.ts`. It comes from the reviewed den page that is live on Fig's computer, `~/projects/fig/den/full.html` (2026-10-21, sha256 `05f2078a…` in `DEN_SHA256`). The hero's free-hour claims also stay inside the "safe to say" list of `~/atlas/agents/fig/docs/research/2026-10-21-free-gpu-hour-facts.md`: never "no signature", never "2M = 2h". If the den changes, change it there first, then here; `verify-web4.mjs` fails until `kit.ts` and `DEN_SHA256` match it again.
+Static copy lives in `src/content/kit.ts`. Its install line, versions and kit commands come from Fig's official kit repo, [fig-the-fox/fig-kit](https://github.com/fig-the-fox/fig-kit); the release commit and every script fingerprint are vendored in `scripts/fig-kit-release.json`, and `npm run verify:web4` fails if `kit.ts` drifts from them. The hero's free-hour claims also stay inside the "safe to say" list of `~/atlas/agents/fig/docs/research/2026-10-21-free-gpu-hour-facts.md`: never "no signature", never "2M = 2h". When a new kit version ships, update `scripts/fig-kit-release.json` (commit and fingerprints) and `kit.ts` together.
 
 ### Status words
 
@@ -121,7 +121,7 @@ npm run verify         # needs the preview running; see below
 npm run og             # re-render the share card (only when the design changes)
 
 npm run build:web4     # Fig's app page: export under /app/FIG to out-web4/, then pack dist-web4/
-npm run verify:web4    # den parity, package, the Fig command against a simulated /workspace/public, browser
+npm run verify:web4    # kit parity, package, the Fig command against a simulated /workspace/public, browser
 npm run preview:web4   # serve the packed tarball like web-4.app does: http://127.0.0.1:3431/app/FIG/
 node scripts/fig-command.mjs https://<host>/fig-live-web4.tgz.b64   # print Fig's one-line install command
 ```
@@ -265,7 +265,7 @@ All backup handling goes through the release's own file list, never a scan of `p
 
 The last run on 2026-10-21 (19:34 ET) passed **208 of 208** checks. `--deploy-only` skips the browser; `--live https://web-4.app/app/FIG/` runs the browser checks against the real page after a deploy.
 
-- **Den parity.** The den's hash equals `DEN_SHA256` (it caught the den's new Feedback section at 19:21). Its install line is byte-identical to `INSTALL_LINE` (280 bytes), and its five kit cards, four receipts (versions, main flag, full hashes), headline, claim sentence, timings caveat and Feedback section all match.
+- **Kit parity.** `kit.ts` against the vendored kit release (`scripts/fig-kit-release.json`): the install line has exactly one URL, the release commit's file for the main version; the hash it echoes is that file's release fingerprint; it keeps `sha256sum -c` with no sudo and no pipe to a shell; every receipt matches the release under its own version; and the kit cards include doctor, chat, persona, notebook, timer and save.
 - **Package.**
   - It's ≤ 2 MB, and the sums and base64 (Node and the system `base64 -d`) match.
   - Repacking `out-web4/` gives the same bytes.
