@@ -1,0 +1,34 @@
+{
+  "name": "fig-live",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fig Live: a human-friendly holder page for Fig the Fox ($FIG) on Web4. Static site, client-side public data only.",
+  "scripts": {
+    "dev": "next dev -H 127.0.0.1 -p 3422",
+    "prebuild": "node scripts/build-uptime.mjs",
+    "build": "next build",
+    "preview": "node scripts/serve-config.mjs && serve out -c ../serve.local.json -l tcp://127.0.0.1:3421 --no-port-switching --no-clipboard",
+    "typecheck": "tsc --noEmit",
+    "verify": "node scripts/verify.mjs",
+    "og": "node scripts/build-og.mjs",
+    "uptime": "node scripts/build-uptime.mjs",
+    "build:web4": "FIG_LIVE_TARGET=web4 next build && node scripts/pack-web4.mjs",
+    "preview:web4": "node scripts/serve-web4.mjs",
+    "verify:web4": "node scripts/verify-web4.mjs"
+  },
+  "dependencies": {
+    "next": "15.5.28",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "playwright-core": "^1.61.1",
+    "serve": "14.2.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
