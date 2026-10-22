@@ -5,7 +5,7 @@
 
 // Note the two spaces between the hash and the file name: `sha256sum -c` needs them.
 export const INSTALL_LINE =
-  'mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/fig-the-fox/fig-kit/b2b5145a6d009d702efabb3e6d3289875ebe33c2/fig-v0.3.0.sh -o /tmp/fig.sh && echo "9bfa0934cd788b17cdf5b870ece3005ec4d9b957dd62f5bf7c48adce88ddae77  /tmp/fig.sh" | sha256sum -c && install -m 755 /tmp/fig.sh ~/.local/bin/fig && export PATH="$HOME/.local/bin:$PATH"';
+  'mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/fig-the-fox/fig-kit/fb44aac672b0d10844e37192f8cc1e34446e8c66/fig-v0.3.1.sh -o /tmp/fig.sh && echo "e31548732db26797c887858289d8079d814cf21fd09532c6c26ae72383ec93e2  /tmp/fig.sh" | sha256sum -c && install -m 755 /tmp/fig.sh ~/.local/bin/fig && export PATH="$HOME/.local/bin:$PATH"';
 
 export const INSTALL_NOTE = "It checks the file's fingerprint before installing anything. No sudo. If the check fails, nothing is installed.";
 
@@ -22,7 +22,7 @@ export const KIT_STEPS: Array<{ title: string; commands: KitCommand[] }> = [
       {
         command: "fig start chat",
         body: [
-          "Installs Ollama (its official installer) and downloads an open AI model sized to your GPU. It runs only on that machine, with an API at ",
+          "Asks first, then installs Ollama (its official installer) and downloads an open AI model sized to your GPU. It runs only on that machine, with an API at ",
           { code: "127.0.0.1:11434" },
           ". Then chat with ",
           { code: "ollama run llama3.1:8b" },
@@ -62,7 +62,8 @@ export const KIT_STEPS: Array<{ title: string; commands: KitCommand[] }> = [
 export const COMING_NEXT = ["Make images", "Transcribe audio", "Fine-tune a model"] as const;
 
 export const VERSIONS: Array<{ version: string; main?: boolean; sha256: string }> = [
-  { version: "v0.3.0", main: true, sha256: "9bfa0934cd788b17cdf5b870ece3005ec4d9b957dd62f5bf7c48adce88ddae77" },
+  { version: "v0.3.1", main: true, sha256: "e31548732db26797c887858289d8079d814cf21fd09532c6c26ae72383ec93e2" },
+  { version: "v0.3.0", sha256: "9bfa0934cd788b17cdf5b870ece3005ec4d9b957dd62f5bf7c48adce88ddae77" },
   { version: "v0.2.2", sha256: "aeb22ea06d561f1955f4bc821703bbac0395bf6ce2512b47b48f719c77b2b68c" },
   { version: "v0.1.2", sha256: "a51ad26b4932d16d49be576dfbfd4d6cdec251b88900affa96d229c465a179f9" },
   { version: "v0.1.1", sha256: "ff94e8175f0ed8d9229ba98253c2faaca90ecf3b5c611d1de94a0476486773ac" },
